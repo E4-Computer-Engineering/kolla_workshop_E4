@@ -1,0 +1,119 @@
+---
+- name: Setup NFS Server
+  hosts: nfs_server
+  become: yes
+  vars:
+    nfs_export_network: "0.0.0.0/0"
+
+  tasks:
+    - name: Install NFS server packages
+      apt:
+        name: nfs-kernel-server
+        state: present
+        update_cache: yes
+
+    - name: Create NFS export directory
+      file:
+        path: /openstack/nfs
+        state: directory
+        mode: '0777'
+
+    - name: Configure NFS exports
+      lineinfile:
+        path: /etc/exports
+        line: "/openstack/nfs {{ nfs_export_network }}(rw,sync,no_subtree_check)"
+        create: yes
+        state: present
+
+    - name: Restart NFS service
+      systemd:
+        name: nfs-kernel-server
+        state: restarted
+        enabled: yes
+
+- name: Setup OpenStack Environment
+  hosts: openstack_nodes
+  become: yes
+  vars:
+    e4user_password: "{{ 'secretpwd' | password_hash('sha512') }}"
+    bridge_gw: "10.0.100.1"
+    bridge_int: "ens3"
+    dhcp_net: "ens4" 
+
+  tasks:
+    - name: Update and upgrade all packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Ensure e4user exists with sudo and password
+      user:
+        name: e4user
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        password: "{{ e4user_password }}"
+        state: present
+
+    - name: Create OpenStack installation directory
+      file:
+        path: /openstack/e4user
+        state: directory
+        owner: e4user
+        group: e4user
+        mode: '0755'
+        recurse: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - git
+          - python3-dev
+          - libffi-dev
+          - gcc
+          - libssl-dev
+          - build-essential
+          - libdbus-glib-1-dev
+          - libpython3-dev
+          - cmake
+          - libglib2.0-dev
+          - python3-venv
+          - python3-pip
+          - nfs-common
+        state: present
+        update_cache: yes
+
+    - name: Enable password authentication in SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication yes'
+        state: present
+        backrefs: yes
+
+    - name: Restart SSH service
+      service:
+        name: ssh
+        state: restarted
+
+    - name: Ensure /etc/systemd/network exists
+      file:
+        path: /etc/systemd/network
+        state: directory
+        mode: '0755'
+
+    - name: Deploy network configuration templates
+      template:
+        src: "{{ item.src }}"
+        dest: "/etc/systemd/network/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: '10-br0.netdev.j2', dest: '10-br0.netdev' }
+        - { src: '10-br0.network.j2', dest: '10-br0.network' }
+        - { src: '10-bridge.network.j2', dest: '10-{{ bridge_int }}.network' }
+        - { src: '10-dhcp.network.j2', dest: '10-{{ dhcp_net }}.network' }
+        - { src: '10-veth-ovs.network.j2', dest: '10-veth-ovs.network' }
+        - { src: '10-veth-phy.netdev.j2', dest: '10-veth-phy.netdev' }
+        - { src: '10-veth-phy.network.j2', dest: '10-veth-phy.network' }
