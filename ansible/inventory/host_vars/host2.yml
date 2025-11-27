@@ -1,2 +1,4 @@
 ---
 e4user_password: "{{ 'secretpwd2' | password_hash('sha512') }}"
+pool_start: 206
+pool_end: 210

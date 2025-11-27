@@ -9,6 +9,11 @@
 
   tasks:
 
+    - name: Update and upgrade all packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
     - name: Install required packages
       apt:
         name:
@@ -70,6 +75,15 @@
         update_cache: yes
         upgrade: dist
 
+    - name: Ensure SSH password authentication is enabled
+      lineinfile:
+        path: /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication yes'
+        state: present
+        backup: yes
+        create: yes
+
     - name: Ensure e4user exists with sudo and password
       user:
         name: e4user
@@ -95,7 +109,23 @@
         mode: '0755'
         recurse: yes
 
-    - name: Install required packages
+    - name: Copy custom init.sh file
+      template:
+        src: templates/init.sh.j2
+        dest: /openstack/e4user/init-runonce.sh
+        owner: e4user
+        group: e4user
+        mode: '0744'
+    
+    - name: Copy file with owner and permissions
+      copy:
+        src: files/destroy.sh
+        dest: /openstack/e4user/destroy.sh
+        owner: e4user
+        group: e4user
+        mode: '0744'
+
+    - name: Install required packages  
       apt:
         name:
           - git
