@@ -7,9 +7,9 @@ Address={{ bridge_ip }}
 {% else %}
 # Address to be set per host
 {% endif %}
-
 {% if bridge_gw is defined %}
 Gateway={{ bridge_gw }}
 {% else %}
 # Gateway to be set per host
 {% endif %}
+DNS=8.8.8.8

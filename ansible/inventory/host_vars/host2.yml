@@ -1,0 +1,2 @@
+---
+e4user_password: "{{ 'secretpwd2' | password_hash('sha512') }}"

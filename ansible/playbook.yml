@@ -3,25 +3,50 @@
   hosts: nfs_server
   become: yes
   vars:
-    nfs_export_network: "0.0.0.0/0"
+    nfs_export_network: "10.0.1.0/24"
+    mount_point: /openstack/nfs
+    device_name: /dev/vdb
 
   tasks:
-    - name: Install NFS server packages
+
+    - name: Install required packages
       apt:
-        name: nfs-kernel-server
+        name:
+          - nfs-kernel-server
+          - e2fsprogs
         state: present
         update_cache: yes
 
-    - name: Create NFS export directory
+    - name: Create filesystem on /dev/vdb if not already formatted
+      filesystem:
+        fstype: ext4
+        dev: "{{ device_name }}"
+
+    - name: Create mount directory
       file:
-        path: /openstack/nfs
+        path: "{{ mount_point }}"
         state: directory
         mode: '0777'
+
+    - name: Mount /dev/vdb to mount point
+      mount:
+        path: "{{ mount_point }}"
+        src: "{{ device_name }}"
+        fstype: ext4
+        state: mounted
+
+    - name: Ensure mount persists in /etc/fstab
+      mount:
+        path: "{{ mount_point }}"
+        src: "{{ device_name }}"
+        fstype: ext4
+        opts: defaults
+        state: present
 
     - name: Configure NFS exports
       lineinfile:
         path: /etc/exports
-        line: "/openstack/nfs {{ nfs_export_network }}(rw,sync,no_subtree_check)"
+        line: "{{ mount_point }} {{ nfs_export_network }}(rw,sync,no_subtree_check)"
         create: yes
         state: present
 
@@ -35,8 +60,7 @@
   hosts: openstack_nodes
   become: yes
   vars:
-    e4user_password: "{{ 'secretpwd' | password_hash('sha512') }}"
-    bridge_gw: "10.0.100.1"
+    bridge_gw: "10.0.1.1"
     bridge_int: "ens3"
     dhcp_net: "ens4" 
 
@@ -54,6 +78,13 @@
         append: yes
         password: "{{ e4user_password }}"
         state: present
+
+    - name: Allow user to have passwordless sudo
+      lineinfile:
+        path: /etc/sudoers.d/e4user
+        line: "e4user ALL=(ALL) NOPASSWD:ALL"
+        create: yes
+        mode: '0440'
 
     - name: Create OpenStack installation directory
       file:
@@ -117,3 +148,14 @@
         - { src: '10-veth-ovs.network.j2', dest: '10-veth-ovs.network' }
         - { src: '10-veth-phy.netdev.j2', dest: '10-veth-phy.netdev' }
         - { src: '10-veth-phy.network.j2', dest: '10-veth-phy.network' }
+    
+    - name: Restart systemd-networkd
+      service:
+        name: systemd-networkd
+        state: restarted
+
+    - name: Remove netplan package
+      apt:
+        name: netplan.io
+        state: absent
+        purge: true
