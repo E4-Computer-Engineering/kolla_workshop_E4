@@ -123,7 +123,7 @@ fi
 
 # Generate instance
 VM_NAME=${VM_NAME:-'demo-vm'}
-$KOLLA_OPENSTACK_COMMAND server create --image ${IMAGE_NAME} --flavor m1.tiny --key-name mykey --network demo-net ${VM_NAME}
+$KOLLA_OPENSTACK_COMMAND server create --image ${IMAGE_NAME} --flavor m1.tiny --key-name mykey --boot-from-volume 15 --network demo-net ${VM_NAME}
 $KOLLA_OPENSTACK_COMMAND floating ip create ${EXT_NET_NAME}
 FLOATING_IP=$($KOLLA_OPENSTACK_COMMAND floating ip list -c "Floating IP Address" -f value)
 echo "Wait 5 seconds to let host's port generate"
